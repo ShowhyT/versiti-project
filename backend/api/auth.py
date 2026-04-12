@@ -61,10 +61,16 @@ def _extract_from_token(cookies: dict) -> tuple[str, str]:
     access_token = (cookies.get("access_token") or "").strip()
     name = ""
     email = ""
+    preferred = ""
     if not access_token:
         return name, email
     try:
         payload = pyjwt.decode(access_token, options={"verify_signature": False})
+        preferred = (payload.get("preferred_username") or "").strip()
+        email = (payload.get("email") or "").strip()
+        # In MIREA, preferred_username is usually the email (e.g. ivanov.a@edu.mirea.ru)
+        if not email and "@" in preferred:
+            email = preferred
         name = (payload.get("name") or "").strip()
         if not name:
             given = (payload.get("given_name") or "").strip()
@@ -72,8 +78,7 @@ def _extract_from_token(cookies: dict) -> tuple[str, str]:
             if given or family:
                 name = f"{family} {given}".strip()
         if not name:
-            name = (payload.get("preferred_username") or "").strip()
-        email = (payload.get("email") or "").strip()
+            name = preferred
     except Exception:
         pass
     return name, email
