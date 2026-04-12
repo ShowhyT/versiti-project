@@ -61,6 +61,7 @@ body {
   display: flex;
   flex-direction: column;
   max-width: 430px;
+  height: 100dvh;
   margin: 0 auto;
   position: relative;
   overflow: hidden;
