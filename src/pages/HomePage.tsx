@@ -89,7 +89,14 @@ function ScannerModal({
       scannerRef.current = instance
       await instance.start(
         { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 240, height: 240 } },
+        {
+          fps: 10,
+          qrbox: (w: number, h: number) => {
+            const size = Math.floor(Math.min(w, h) * 0.85)
+            return { width: size, height: size }
+          },
+          aspectRatio: 1,
+        },
         async (decodedText: string) => {
           await stopScanner()
           await markAttendance(decodedText)
