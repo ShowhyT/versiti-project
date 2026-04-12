@@ -30,11 +30,19 @@ function formatDateLabel(date: Date) {
   return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
+function localDayKey(d: Date) {
+  // Local date key (YYYY-MM-DD), not UTC
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 function groupEventsByDay(events: ScheduleEvent[]) {
   const days = new Map<string, ScheduleEvent[]>()
   for (const ev of events) {
     if (!ev.start) continue
-    const dateKey = ev.start.slice(0, 10)
+    const dateKey = localDayKey(new Date(ev.start))
     if (!days.has(dateKey)) days.set(dateKey, [])
     days.get(dateKey)!.push(ev)
   }
@@ -114,16 +122,26 @@ export default function SchedulePage() {
 
   const eventsByDay = useMemo(() => groupEventsByDay(events), [events])
 
-  const focusKey = focusDate.toISOString().slice(0, 10)
+  const focusKey = localDayKey(focusDate)
   const dayEvents: ScheduleEvent[] = eventsByDay.get(focusKey) || []
   const allDays = [...eventsByDay.keys()].sort()
+
+  // Auto-focus first day with events if current has none
+  useEffect(() => {
+    if (allDays.length === 0) return
+    if (!allDays.includes(focusKey)) {
+      // Pick today if present, else first upcoming day, else first
+      const todayKey = localDayKey(new Date())
+      const upcoming = allDays.find((d) => d >= todayKey)
+      setFocusDate(new Date(upcoming || allDays[0] + 'T00:00:00'))
+    }
+  }, [allDays, focusKey])
 
   const shiftDay = (dir: number) => {
     const idx = allDays.indexOf(focusKey)
     if (idx === -1) {
-      const next = new Date(focusDate)
-      next.setDate(next.getDate() + dir)
-      setFocusDate(next)
+      if (allDays.length === 0) return
+      setFocusDate(new Date(allDays[0] + 'T00:00:00'))
     } else {
       const nextIdx = Math.max(0, Math.min(allDays.length - 1, idx + dir))
       setFocusDate(new Date(allDays[nextIdx] + 'T00:00:00'))
