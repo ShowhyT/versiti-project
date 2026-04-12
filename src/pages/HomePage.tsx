@@ -9,11 +9,20 @@ import {
   XCircle,
   User,
   Users,
+  Check,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import type { AttendanceMarkResponse } from '../lib/types'
 
 const SCANNER_ELEMENT_ID = 'qr-scanner-region'
+
+interface FriendItem {
+  id: number
+  user_id: number
+  full_name: string
+  email: string | null
+  is_favorite: boolean
+}
 
 function ScannerModal({
   open,
@@ -28,18 +37,36 @@ function ScannerModal({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const scannerRef = useRef<any>(null)
 
+  // Friends selection
+  const [friends, setFriends] = useState<FriendItem[]>([])
+  const [selectedFriendIds, setSelectedFriendIds] = useState<Set<number>>(new Set())
+  const [showFriendPicker, setShowFriendPicker] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    api<{ success: boolean; friends: FriendItem[] }>('/api/friends')
+      .then((res) => {
+        if (res.success) setFriends(res.friends)
+      })
+      .catch(() => { /* ignore */ })
+  }, [open])
+
   const markAttendance = useCallback(async (qrData: string) => {
     setError(null)
     try {
+      const body: Record<string, unknown> = { qr_data: qrData }
+      if (selectedFriendIds.size > 0) {
+        body.friend_ids = [...selectedFriendIds]
+      }
       const res = await api<AttendanceMarkResponse>('/api/attendance/mark', {
         method: 'POST',
-        body: JSON.stringify({ qr_data: qrData }),
+        body: JSON.stringify(body),
       })
       setResults(res)
     } catch {
       setError('Ошибка отметки посещаемости')
     }
-  }, [])
+  }, [selectedFriendIds])
 
   const stopScanner = useCallback(async () => {
     if (scannerRef.current) {
@@ -81,13 +108,21 @@ function ScannerModal({
       stopScanner()
       return
     }
-    // Delay to ensure DOM element is rendered
     const t = setTimeout(() => startScanner(), 50)
     return () => {
       clearTimeout(t)
       stopScanner()
     }
   }, [open, startScanner, stopScanner])
+
+  const toggleFriend = (userId: number) => {
+    setSelectedFriendIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(userId)) next.delete(userId)
+      else next.add(userId)
+      return next
+    })
+  }
 
   if (!open) return null
 
@@ -105,8 +140,68 @@ function ScannerModal({
         </button>
       </div>
 
+      {/* Friends selection toggle */}
+      {friends.length > 0 && !results && (
+        <div className="px-4 pb-3">
+          <button
+            onClick={() => setShowFriendPicker(!showFriendPicker)}
+            className="w-full flex items-center justify-between bg-surface-2 border border-border rounded-xl px-4 py-3 hover:border-border-active transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Users size={18} className="text-brand" />
+              <span className="text-sm text-text-primary">
+                Отметить с друзьями
+              </span>
+            </div>
+            {selectedFriendIds.size > 0 && (
+              <span className="text-xs bg-brand text-white px-2 py-0.5 rounded-full">
+                {selectedFriendIds.size}
+              </span>
+            )}
+          </button>
+
+          <AnimatePresence>
+            {showFriendPicker && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden mt-2"
+              >
+                <div className="space-y-1 max-h-48 overflow-y-auto">
+                  {friends.map((f) => {
+                    const selected = selectedFriendIds.has(f.user_id)
+                    return (
+                      <button
+                        key={f.user_id}
+                        onClick={() => toggleFriend(f.user_id)}
+                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg border transition-colors ${
+                          selected
+                            ? 'bg-brand/10 border-brand/40'
+                            : 'bg-surface-2 border-border'
+                        }`}
+                      >
+                        <div
+                          className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${
+                            selected ? 'bg-brand border-brand' : 'border-border'
+                          }`}
+                        >
+                          {selected && <Check size={12} className="text-white" />}
+                        </div>
+                        <span className="text-sm text-text-primary text-left truncate flex-1">
+                          {f.full_name}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
       <div className="flex-1 flex flex-col items-center justify-center px-6 gap-6">
-        {/* Scanner element — always mounted so html5-qrcode can attach */}
         <div
           id={SCANNER_ELEMENT_ID}
           className={`w-full max-w-xs aspect-square rounded-2xl overflow-hidden ${
@@ -139,7 +234,7 @@ function ScannerModal({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={spring}
-            className="w-full max-w-sm space-y-3"
+            className="w-full max-w-sm space-y-3 max-h-[60vh] overflow-y-auto"
           >
             {results.results?.map((r, i) => (
               <div
@@ -162,7 +257,7 @@ function ScannerModal({
               </div>
             ))}
 
-            <div className="flex gap-3 pt-2">
+            <div className="flex gap-3 pt-2 sticky bottom-0 bg-surface-0/95 backdrop-blur-sm py-2">
               <button
                 onClick={() => {
                   setResults(null)
@@ -204,7 +299,6 @@ export default function HomePage({ onOpenProfile, onOpenFriends }: { onOpenProfi
           </p>
         </div>
 
-        {/* Scanner button */}
         <motion.button
           onClick={() => setScannerOpen(true)}
           whileTap={{ scale: 0.97 }}
@@ -221,7 +315,6 @@ export default function HomePage({ onOpenProfile, onOpenFriends }: { onOpenProfi
           </div>
         </motion.button>
 
-        {/* Quick links */}
         <div className="grid grid-cols-2 gap-3">
           <button
             onClick={onOpenFriends}
