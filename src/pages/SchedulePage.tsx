@@ -1,11 +1,12 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { slideUp, spring } from '../lib/motion'
-import { Search, X, Clock, MapPin, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
-import { useSchedule, useGroupSearch } from '../hooks/useSchedule'
-import type { ScheduleEvent, SearchItem } from '../lib/types'
+import { Clock, MapPin, ChevronLeft, ChevronRight, Loader2, RefreshCw, BookOpen } from 'lucide-react'
+import { api } from '../lib/api'
+import type { ScheduleEvent } from '../lib/types'
 
 function formatTime(iso: string) {
+  if (!iso) return ''
   const d = new Date(iso)
   return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
 }
@@ -32,6 +33,7 @@ function formatDateLabel(date: Date) {
 function groupEventsByDay(events: ScheduleEvent[]) {
   const days = new Map<string, ScheduleEvent[]>()
   for (const ev of events) {
+    if (!ev.start) continue
     const dateKey = ev.start.slice(0, 10)
     if (!days.has(dateKey)) days.set(dateKey, [])
     days.get(dateKey)!.push(ev)
@@ -51,11 +53,13 @@ function EventCard({ event }: { event: ScheduleEvent }) {
         <h3 className="text-sm font-medium text-text-primary leading-snug flex-1">
           {event.summary}
         </h3>
-        <div className="flex items-center gap-1 text-xs text-brand shrink-0">
-          <Clock size={12} />
-          {formatTime(event.start)}
-          {event.end && ` – ${formatTime(event.end)}`}
-        </div>
+        {event.start && (
+          <div className="flex items-center gap-1 text-xs text-brand shrink-0">
+            <Clock size={12} />
+            {formatTime(event.start)}
+            {event.end && ` – ${formatTime(event.end)}`}
+          </div>
+        )}
       </div>
       {event.location && (
         <div className="flex items-center gap-1 text-xs text-text-secondary">
@@ -73,34 +77,42 @@ function EventCard({ event }: { event: ScheduleEvent }) {
 }
 
 export default function SchedulePage() {
-  const [query, setQuery] = useState('')
-  const [selectedGroup, setSelectedGroup] = useState<SearchItem | null>(null)
+  const [events, setEvents] = useState<ScheduleEvent[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [needsAuth, setNeedsAuth] = useState(false)
   const [focusDate, setFocusDate] = useState(() => new Date())
-  const { schedule, loading, error, fetchSchedule } = useSchedule()
-  const { groups, loading: searchLoading, search } = useGroupSearch()
-  const [showSearch, setShowSearch] = useState(true)
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  const fetchSchedule = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await api<{
+        success: boolean
+        events: ScheduleEvent[]
+        message?: string
+        needs_auth?: boolean
+      }>('/api/schedule/pulse?days=14')
+      if (res.success) {
+        setEvents(res.events)
+        setNeedsAuth(false)
+      } else if (res.needs_auth) {
+        setNeedsAuth(true)
+      } else {
+        setError(res.message || 'Ошибка загрузки')
+      }
+    } catch {
+      setError('Не удалось загрузить расписание')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => search(query), 300)
-    return () => clearTimeout(debounceRef.current)
-  }, [query, search])
+    fetchSchedule()
+  }, [fetchSchedule])
 
-  const handleSelectGroup = (group: SearchItem) => {
-    setSelectedGroup(group)
-    setShowSearch(false)
-    setQuery('')
-    const params: Record<string, string> = { type: 'group' }
-    if (group.uid) params.uid = group.uid
-    else params.group_name = group.name
-    fetchSchedule(params)
-  }
-
-  const eventsByDay = useMemo(
-    () => (schedule ? groupEventsByDay(schedule.events) : new Map<string, ScheduleEvent[]>()),
-    [schedule],
-  )
+  const eventsByDay = useMemo(() => groupEventsByDay(events), [events])
 
   const focusKey = focusDate.toISOString().slice(0, 10)
   const dayEvents: ScheduleEvent[] = eventsByDay.get(focusKey) || []
@@ -121,88 +133,37 @@ export default function SchedulePage() {
   return (
     <div className="flex-1 overflow-y-auto px-4 py-6">
       <motion.div variants={slideUp} initial="enter" animate="active" className="space-y-4">
-        {/* Header */}
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold text-text-primary">Расписание</h1>
-          {selectedGroup && (
-            <button
-              onClick={() => {
-                setSelectedGroup(null)
-                setShowSearch(true)
-              }}
-              className="text-xs text-brand"
-            >
-              Сменить группу
-            </button>
-          )}
+          <button
+            onClick={fetchSchedule}
+            disabled={loading}
+            className="p-2 text-text-muted hover:text-brand transition-colors"
+          >
+            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+          </button>
         </div>
 
-        {/* Search */}
-        {showSearch && (
-          <div className="relative">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-            <input
-              type="text"
-              placeholder="Поиск группы..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="w-full pl-9 pr-9 py-3 bg-surface-2 border border-border rounded-xl text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-border-active transition-colors"
-            />
-            {query && (
-              <button
-                onClick={() => setQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted"
-              >
-                <X size={16} />
-              </button>
-            )}
+        {needsAuth && (
+          <div className="bg-surface-2 rounded-xl border border-border p-4 flex items-center gap-3">
+            <BookOpen size={20} className="text-brand shrink-0" />
+            <p className="text-sm text-text-secondary">
+              Подключите аккаунт МИРЭА в профиле для просмотра расписания
+            </p>
           </div>
         )}
 
-        {/* Search results */}
-        {showSearch && query.length >= 2 && (
-          <div className="space-y-1">
-            {searchLoading ? (
-              <div className="flex justify-center py-4">
-                <Loader2 size={20} className="animate-spin text-text-muted" />
-              </div>
-            ) : groups.length > 0 ? (
-              groups.map((g) => (
-                <button
-                  key={g.uid || g.name}
-                  onClick={() => handleSelectGroup(g)}
-                  className="w-full text-left px-4 py-3 bg-surface-2 rounded-xl text-sm text-text-primary hover:border-border-active border border-border transition-colors"
-                >
-                  {g.name}
-                </button>
-              ))
-            ) : (
-              <p className="text-sm text-text-muted text-center py-4">Ничего не найдено</p>
-            )}
-          </div>
-        )}
-
-        {/* Selected group indicator */}
-        {selectedGroup && !showSearch && (
-          <div className="text-sm text-text-secondary">
-            Группа: <span className="text-text-primary font-medium">{selectedGroup.name}</span>
-          </div>
-        )}
-
-        {/* Loading */}
-        {loading && (
+        {loading && events.length === 0 && (
           <div className="flex justify-center py-12">
             <Loader2 size={24} className="animate-spin text-brand" />
           </div>
         )}
 
-        {/* Error */}
         {error && (
           <div className="bg-danger/10 text-danger text-sm rounded-xl p-4 text-center">{error}</div>
         )}
 
-        {/* Day navigation */}
-        {schedule && !loading && allDays.length > 0 && (
+        {!loading && allDays.length > 0 && (
           <>
             <div className="flex items-center justify-between">
               <button onClick={() => shiftDay(-1)} className="p-2 text-text-muted hover:text-text-primary transition-colors">
@@ -221,8 +182,7 @@ export default function SchedulePage() {
               </button>
             </div>
 
-            {/* Day dots */}
-            <div className="flex justify-center gap-1.5">
+            <div className="flex justify-center gap-1.5 flex-wrap">
               {allDays.map((d) => (
                 <button
                   key={d}
@@ -245,7 +205,6 @@ export default function SchedulePage() {
               ))}
             </div>
 
-            {/* Events */}
             <AnimatePresence mode="wait">
               <motion.div
                 key={focusKey}
@@ -265,9 +224,8 @@ export default function SchedulePage() {
           </>
         )}
 
-        {/* Empty state */}
-        {!schedule && !loading && !showSearch && (
-          <p className="text-sm text-text-muted text-center py-8">Выберите группу для просмотра расписания</p>
+        {!loading && !needsAuth && !error && events.length === 0 && (
+          <p className="text-sm text-text-muted text-center py-8">Нет расписания</p>
         )}
       </motion.div>
     </div>
