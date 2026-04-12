@@ -87,6 +87,9 @@ def _extract_from_token(cookies: dict) -> tuple[str, str]:
 async def _get_or_create_user(mirea_login: str, cookies: dict) -> tuple[User, str]:
     """Find existing user by mirea_login or create new one. Returns (user, jwt_token)."""
     display_name, email = _extract_from_token(cookies)
+    # Fallback: MIREA logins are typically emails (name.surname@edu.mirea.ru)
+    if not email and "@" in mirea_login:
+        email = mirea_login
 
     cookies["__token_refreshed_at"] = int(time_module.time())
     crypto = get_crypto()
