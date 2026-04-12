@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import TabBar from './components/TabBar'
 import LoginPage from './pages/LoginPage'
@@ -15,59 +16,39 @@ import { getToken, setToken } from './lib/api'
 
 export type TabId = 'home' | 'schedule' | 'maps' | 'passes' | 'grades' | 'esports'
 
-type Overlay = 'profile' | 'friends' | 'privacy' | null
+const TAB_PATHS: TabId[] = ['home', 'schedule', 'maps', 'passes', 'grades', 'esports']
 
-const PAGES: Record<TabId, React.FC<{ onOpenProfile?: () => void; onOpenFriends?: () => void }>> = {
-  home: HomePage,
-  schedule: SchedulePage,
-  maps: MapsPage,
-  passes: PassesPage,
-  grades: GradesPage,
-  esports: EsportsPage,
-}
+function MainLayout({ onLogout }: { onLogout: () => void }) {
+  const navigate = useNavigate()
+  const location = useLocation()
 
-export default function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(() => !!getToken())
-  const [activeTab, setActiveTab] = useState<TabId>('home')
-  const [overlay, setOverlay] = useState<Overlay>(null)
+  const currentTab = (location.pathname.slice(1) as TabId) || 'home'
+  const activeTab = TAB_PATHS.includes(currentTab) ? currentTab : 'home'
 
-  const handleLogin = useCallback(() => {
-    setIsLoggedIn(true)
-  }, [])
-
-  const handleLogout = useCallback(() => {
-    setToken(null)
-    setIsLoggedIn(false)
-    setOverlay(null)
-  }, [])
-
-  if (overlay === 'privacy') {
-    return <PrivacyPage onClose={() => setOverlay(null)} />
+  const renderPage = () => {
+    switch (activeTab) {
+      case 'home':
+        return (
+          <HomePage
+            onOpenProfile={() => navigate('/profile')}
+            onOpenFriends={() => navigate('/friends')}
+          />
+        )
+      case 'schedule':
+        return <SchedulePage />
+      case 'maps':
+        return <MapsPage />
+      case 'passes':
+        return <PassesPage />
+      case 'grades':
+        return <GradesPage />
+      case 'esports':
+        return <EsportsPage />
+    }
   }
 
-  if (!isLoggedIn) {
-    return (
-      <LoginPage
-        onLogin={handleLogin}
-        onOpenPrivacy={() => setOverlay('privacy')}
-      />
-    )
-  }
-
-  if (overlay === 'profile') {
-    return (
-      <ProfilePage
-        onClose={() => setOverlay(null)}
-        onLogout={handleLogout}
-      />
-    )
-  }
-
-  if (overlay === 'friends') {
-    return <FriendsPage onClose={() => setOverlay(null)} />
-  }
-
-  const Page = PAGES[activeTab]
+  // Attach logout to profile when it's rendered there
+  void onLogout
 
   return (
     <>
@@ -80,13 +61,80 @@ export default function App() {
           transition={{ duration: 0.2, ease: 'easeOut' }}
           className="flex-1 overflow-hidden"
         >
-          <Page
-            onOpenProfile={() => setOverlay('profile')}
-            onOpenFriends={() => setOverlay('friends')}
-          />
+          {renderPage()}
         </motion.div>
       </AnimatePresence>
-      <TabBar active={activeTab} onChange={setActiveTab} />
+      <TabBar active={activeTab} onChange={(tab) => navigate(`/${tab}`)} />
     </>
   )
+}
+
+export default function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(() => !!getToken())
+
+  const handleLogin = useCallback(() => {
+    setIsLoggedIn(true)
+  }, [])
+
+  const handleLogout = useCallback(() => {
+    setToken(null)
+    setIsLoggedIn(false)
+  }, [])
+
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route
+          path="/privacy"
+          element={<PrivacyPageWrapper />}
+        />
+        {!isLoggedIn ? (
+          <>
+            <Route
+              path="/"
+              element={<LoginPageWrapper onLogin={handleLogin} />}
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </>
+        ) : (
+          <>
+            <Route path="/profile" element={<ProfilePageWrapper onLogout={handleLogout} />} />
+            <Route path="/friends" element={<FriendsPageWrapper />} />
+            <Route path="/home" element={<MainLayout onLogout={handleLogout} />} />
+            <Route path="/schedule" element={<MainLayout onLogout={handleLogout} />} />
+            <Route path="/maps" element={<MainLayout onLogout={handleLogout} />} />
+            <Route path="/passes" element={<MainLayout onLogout={handleLogout} />} />
+            <Route path="/grades" element={<MainLayout onLogout={handleLogout} />} />
+            <Route path="/esports" element={<MainLayout onLogout={handleLogout} />} />
+            <Route path="*" element={<Navigate to="/home" replace />} />
+          </>
+        )}
+      </Routes>
+    </BrowserRouter>
+  )
+}
+
+function LoginPageWrapper({ onLogin }: { onLogin: () => void }) {
+  const navigate = useNavigate()
+  return <LoginPage onLogin={() => { onLogin(); navigate('/home') }} onOpenPrivacy={() => navigate('/privacy')} />
+}
+
+function PrivacyPageWrapper() {
+  const navigate = useNavigate()
+  return <PrivacyPage onClose={() => navigate(-1)} />
+}
+
+function ProfilePageWrapper({ onLogout }: { onLogout: () => void }) {
+  const navigate = useNavigate()
+  return (
+    <ProfilePage
+      onClose={() => navigate('/home')}
+      onLogout={() => { onLogout(); navigate('/') }}
+    />
+  )
+}
+
+function FriendsPageWrapper() {
+  const navigate = useNavigate()
+  return <FriendsPage onClose={() => navigate('/home')} />
 }
