@@ -13,6 +13,8 @@ import {
 import { api } from '../lib/api'
 import type { AttendanceMarkResponse } from '../lib/types'
 
+const SCANNER_ELEMENT_ID = 'qr-scanner-region'
+
 function ScannerModal({
   open,
   onClose,
@@ -20,85 +22,13 @@ function ScannerModal({
   open: boolean
   onClose: () => void
 }) {
-  const videoRef = useRef<HTMLVideoElement>(null)
   const [scanning, setScanning] = useState(false)
   const [results, setResults] = useState<AttendanceMarkResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const streamRef = useRef<MediaStream | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const scannerRef = useRef<any>(null)
 
-  const stopCamera = useCallback(() => {
-    streamRef.current?.getTracks().forEach((t) => t.stop())
-    streamRef.current = null
-    setScanning(false)
-  }, [])
-
-  const startCamera = useCallback(async () => {
-    setError(null)
-    setResults(null)
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
-      })
-      streamRef.current = stream
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        await videoRef.current.play()
-      }
-      setScanning(true)
-    } catch {
-      setError('Нет доступа к камере')
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!open) {
-      stopCamera()
-      return
-    }
-    startCamera()
-    return () => stopCamera()
-  }, [open, startCamera, stopCamera])
-
-  // Scan loop using BarcodeDetector
-  useEffect(() => {
-    if (!scanning || !videoRef.current) return
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const BarcodeDetector = (window as any).BarcodeDetector
-    if (!BarcodeDetector) {
-      setError('Ваш браузер не поддерживает сканирование QR')
-      return
-    }
-
-    const detector = new BarcodeDetector({ formats: ['qr_code'] })
-    let active = true
-
-    const scan = async () => {
-      if (!active || !videoRef.current) return
-      try {
-        const barcodes = await detector.detect(videoRef.current)
-        if (barcodes.length > 0) {
-          const qrData = barcodes[0].rawValue
-          if (qrData) {
-            active = false
-            stopCamera()
-            await markAttendance(qrData)
-            return
-          }
-        }
-      } catch {
-        /* ignore */
-      }
-      if (active) requestAnimationFrame(scan)
-    }
-    requestAnimationFrame(scan)
-
-    return () => {
-      active = false
-    }
-  }, [scanning, stopCamera])
-
-  const markAttendance = async (qrData: string) => {
+  const markAttendance = useCallback(async (qrData: string) => {
     setError(null)
     try {
       const res = await api<AttendanceMarkResponse>('/api/attendance/mark', {
@@ -109,7 +39,55 @@ function ScannerModal({
     } catch {
       setError('Ошибка отметки посещаемости')
     }
-  }
+  }, [])
+
+  const stopScanner = useCallback(async () => {
+    if (scannerRef.current) {
+      try {
+        await scannerRef.current.stop()
+        await scannerRef.current.clear()
+      } catch { /* ignore */ }
+      scannerRef.current = null
+    }
+    setScanning(false)
+  }, [])
+
+  const startScanner = useCallback(async () => {
+    setError(null)
+    setResults(null)
+    try {
+      const mod = await import('html5-qrcode')
+      const { Html5Qrcode } = mod
+      const instance = new Html5Qrcode(SCANNER_ELEMENT_ID)
+      scannerRef.current = instance
+      await instance.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 240, height: 240 } },
+        async (decodedText: string) => {
+          await stopScanner()
+          await markAttendance(decodedText)
+        },
+        () => { /* ignore per-frame errors */ },
+      )
+      setScanning(true)
+    } catch (e) {
+      console.error(e)
+      setError('Нет доступа к камере')
+    }
+  }, [stopScanner, markAttendance])
+
+  useEffect(() => {
+    if (!open) {
+      stopScanner()
+      return
+    }
+    // Delay to ensure DOM element is rendered
+    const t = setTimeout(() => startScanner(), 50)
+    return () => {
+      clearTimeout(t)
+      stopScanner()
+    }
+  }, [open, startScanner, stopScanner])
 
   if (!open) return null
 
@@ -128,22 +106,13 @@ function ScannerModal({
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center px-6 gap-6">
-        {scanning && (
-          <div className="relative w-full max-w-xs aspect-square rounded-2xl overflow-hidden border-2 border-brand">
-            <video
-              ref={videoRef}
-              className="w-full h-full object-cover"
-              playsInline
-              muted
-            />
-            <div className="absolute inset-0 border-[3px] border-brand/30 rounded-2xl" />
-            <motion.div
-              animate={{ y: ['0%', '100%', '0%'] }}
-              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-              className="absolute left-4 right-4 h-0.5 bg-brand/60"
-            />
-          </div>
-        )}
+        {/* Scanner element — always mounted so html5-qrcode can attach */}
+        <div
+          id={SCANNER_ELEMENT_ID}
+          className={`w-full max-w-xs aspect-square rounded-2xl overflow-hidden ${
+            scanning ? 'border-2 border-brand' : 'hidden'
+          }`}
+        />
 
         {!scanning && !results && !error && (
           <div className="text-center space-y-4">
@@ -157,7 +126,7 @@ function ScannerModal({
             <XCircle size={48} className="mx-auto text-danger" />
             <p className="text-sm text-danger">{error}</p>
             <button
-              onClick={startCamera}
+              onClick={startScanner}
               className="px-6 py-2 bg-brand text-white rounded-xl text-sm font-medium"
             >
               Попробовать снова
@@ -197,7 +166,7 @@ function ScannerModal({
               <button
                 onClick={() => {
                   setResults(null)
-                  startCamera()
+                  startScanner()
                 }}
                 className="flex-1 py-3 bg-surface-2 border border-border rounded-xl text-sm font-medium text-text-primary"
               >
