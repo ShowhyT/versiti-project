@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+@theme {
+  /* Brand colors — Fluxer-inspired purple palette */
+  --color-brand: #8b5cf6;
+  --color-brand-light: #a78bfa;
+  --color-brand-dark: #7c3aed;
+  --color-brand-glow: rgba(139, 92, 246, 0.15);
+
+  /* Surfaces */
+  --color-surface-0: #0a0a0f;
+  --color-surface-1: #111118;
+  --color-surface-2: #1a1a24;
+  --color-surface-3: #24243a;
+
+  /* Text */
+  --color-text-primary: #f0f0f5;
+  --color-text-secondary: #8a8a9a;
+  --color-text-muted: #55556a;
+
+  /* Semantic */
+  --color-success: #22c55e;
+  --color-danger: #ef4444;
+  --color-warning: #f59e0b;
+
+  /* Border */
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-active: rgba(139, 92, 246, 0.4);
+
+  /* Radius */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-full: 9999px;
+
+  /* Font */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-surface-0);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior: none;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  max-width: 430px;
+  margin: 0 auto;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Safe area padding for notched phones */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  :root {
+    --safe-bottom: env(safe-area-inset-bottom);
+    --safe-top: env(safe-area-inset-top);
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface-3);
+  border-radius: var(--radius-full);
+}
+
+/* Prevent text selection on interactive elements */
+button, a, [role="button"] {
+  user-select: none;
+}
+
+/* Input reset for mobile */
+input, textarea {
+  font-size: 16px; /* prevent iOS zoom */
+}
