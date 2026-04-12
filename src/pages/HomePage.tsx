@@ -202,17 +202,15 @@ function ScannerModal({
       )}
 
       <div className="flex-1 flex flex-col items-center justify-center px-6 gap-6">
-        <div
-          id={SCANNER_ELEMENT_ID}
-          className={`w-full max-w-xs aspect-square rounded-2xl overflow-hidden ${
-            scanning ? 'border-2 border-brand' : 'hidden'
-          }`}
-        />
-
-        {!scanning && !results && !error && (
-          <div className="text-center space-y-4">
-            <Camera size={48} className="mx-auto text-text-muted" />
-            <p className="text-sm text-text-secondary">Инициализация камеры...</p>
+        {!results && (
+          <div className="relative w-full max-w-xs aspect-square rounded-2xl overflow-hidden border-2 border-brand bg-surface-1">
+            <div id={SCANNER_ELEMENT_ID} className="w-full h-full" />
+            {!scanning && !error && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-surface-1/90 pointer-events-none">
+                <Camera size={32} className="text-text-muted" />
+                <p className="text-xs text-text-secondary">Разрешите доступ к камере</p>
+              </div>
+            )}
           </div>
         )}
 
