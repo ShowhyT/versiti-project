@@ -10,6 +10,7 @@ import {
   User,
   Users,
   Check,
+  Star,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import type { AttendanceMarkResponse } from '../lib/types'
@@ -46,7 +47,15 @@ function ScannerModal({
     if (!open) return
     api<{ success: boolean; friends: FriendItem[] }>('/api/friends')
       .then((res) => {
-        if (res.success) setFriends(res.friends)
+        if (res.success) {
+          setFriends(res.friends)
+          // Auto-select favorites
+          const favIds = res.friends.filter((f) => f.is_favorite).map((f) => f.user_id)
+          if (favIds.length > 0) {
+            setSelectedFriendIds(new Set(favIds))
+            setShowFriendPicker(true)
+          }
+        }
       })
       .catch(() => { /* ignore */ })
   }, [open])
@@ -198,6 +207,9 @@ function ScannerModal({
                         <span className="text-sm text-text-primary text-left truncate flex-1">
                           {f.full_name}
                         </span>
+                        {f.is_favorite && (
+                          <Star size={12} className="text-warning fill-warning shrink-0" />
+                        )}
                       </button>
                     )
                   })}

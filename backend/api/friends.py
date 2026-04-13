@@ -36,6 +36,7 @@ async def handle_get_friends(request: web.Request) -> web.Response:
         pending_outgoing = []
 
         for fr, u in sent.all():
+            # I'm user_id in this row → my favorite flag is is_favorite
             item = {
                 "id": fr.id,
                 "user_id": u.id,
@@ -49,12 +50,13 @@ async def handle_get_friends(request: web.Request) -> web.Response:
                 pending_outgoing.append(item)
 
         for fr, u in received.all():
+            # I'm friend_id in this row → my favorite flag is friend_is_favorite
             item = {
                 "id": fr.id,
                 "user_id": u.id,
                 "full_name": u.full_name,
                 "email": u.email,
-                "is_favorite": fr.is_favorite,
+                "is_favorite": fr.friend_is_favorite,
             }
             if fr.status == "accepted":
                 friends.append(item)
@@ -205,6 +207,48 @@ async def handle_respond_friend_request(request: web.Request) -> web.Response:
             return web.json_response({"success": True, "message": "Запрос отклонён"})
     except Exception as e:
         logger.error("respond friend request error: %s", e, exc_info=True)
+        return web.json_response({"success": False, "message": "Внутренняя ошибка"}, status=500)
+    finally:
+        await session.close()
+
+
+async def handle_toggle_favorite(request: web.Request) -> web.Response:
+    """Toggle favorite status for a friend."""
+    user, session = await require_user(request)
+    try:
+        try:
+            data = await request.json()
+        except Exception:
+            return web.json_response({"success": False, "message": "Invalid JSON"}, status=400)
+
+        friend_id = data.get("user_id")
+        is_favorite = bool(data.get("is_favorite", True))
+        if not friend_id:
+            return web.json_response({"success": False, "message": "Укажите user_id"}, status=400)
+
+        result = await session.execute(
+            select(Friend).where(
+                or_(
+                    and_(Friend.user_id == user.id, Friend.friend_id == int(friend_id)),
+                    and_(Friend.user_id == int(friend_id), Friend.friend_id == user.id),
+                ),
+                Friend.status == "accepted",
+            )
+        )
+        fr = result.scalar_one_or_none()
+        if not fr:
+            return web.json_response({"success": False, "message": "Не друг"})
+
+        # Set the correct column based on which side the caller is on
+        if fr.user_id == user.id:
+            fr.is_favorite = is_favorite
+        else:
+            fr.friend_is_favorite = is_favorite
+        await session.commit()
+
+        return web.json_response({"success": True, "is_favorite": is_favorite})
+    except Exception as e:
+        logger.error("toggle favorite error: %s", e, exc_info=True)
         return web.json_response({"success": False, "message": "Внутренняя ошибка"}, status=500)
     finally:
         await session.close()

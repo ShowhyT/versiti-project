@@ -111,6 +111,23 @@ export default function FriendsPage({ onClose }: Props) {
     } catch { /* ignore */ }
   }
 
+  const toggleFavorite = async (userId: number, current: boolean) => {
+    setFriends((prev) =>
+      prev.map((f) => (f.user_id === userId ? { ...f, is_favorite: !current } : f))
+    )
+    try {
+      await api('/api/friends/favorite', {
+        method: 'POST',
+        body: JSON.stringify({ user_id: userId, is_favorite: !current }),
+      })
+    } catch {
+      // Rollback on error
+      setFriends((prev) =>
+        prev.map((f) => (f.user_id === userId ? { ...f, is_favorite: current } : f))
+      )
+    }
+  }
+
   const removeFriend = async (userId: number) => {
     try {
       await api('/api/friends/remove', {
@@ -287,7 +304,20 @@ export default function FriendsPage({ onClose }: Props) {
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  {f.is_favorite && <Star size={14} className="text-warning fill-warning" />}
+                  <button
+                    onClick={() => toggleFavorite(f.user_id, f.is_favorite)}
+                    className={`p-1.5 transition-colors ${
+                      f.is_favorite
+                        ? 'text-warning hover:text-warning/80'
+                        : 'text-text-muted hover:text-warning'
+                    }`}
+                    title={f.is_favorite ? 'Убрать из избранного' : 'В избранное'}
+                  >
+                    <Star
+                      size={16}
+                      className={f.is_favorite ? 'fill-warning' : ''}
+                    />
+                  </button>
                   <button
                     onClick={() => removeFriend(f.user_id)}
                     className="p-1.5 text-text-muted hover:text-danger transition-colors"
