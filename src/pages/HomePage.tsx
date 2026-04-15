@@ -1,13 +1,14 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import {
-	Camera,
-	Check,
-	CheckCircle2,
-	QrCode,
-	User,
-	Users,
-	X,
-	XCircle,
+  QrCode,
+  Camera,
+  X,
+  CheckCircle2,
+  XCircle,
+  User,
+  Users,
+  Check,
+  Star,
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
@@ -52,16 +53,22 @@ function ScannerModal({
 	)
 	const [showFriendPicker, setShowFriendPicker] = useState(false)
 
-	useEffect(() => {
-		if (!open) return
-		api<{ success: boolean; friends: FriendItem[] }>('/api/friends')
-			.then(res => {
-				if (res.success) setFriends(res.friends)
-			})
-			.catch(() => {
-				/* ignore */
-			})
-	}, [open])
+  useEffect(() => {
+    if (!open) return
+    api<{ success: boolean; friends: FriendItem[] }>('/api/friends')
+      .then((res) => {
+        if (res.success) {
+          setFriends(res.friends)
+          // Auto-select favorites
+          const favIds = res.friends.filter((f) => f.is_favorite).map((f) => f.user_id)
+          if (favIds.length > 0) {
+            setSelectedFriendIds(new Set(favIds))
+            setShowFriendPicker(true)
+          }
+        }
+      })
+      .catch(() => { /* ignore */ })
+  }, [open])
 
 	const markAttendance = useCallback(
 		async (qrData: string) => {
@@ -184,22 +191,49 @@ function ScannerModal({
 
 	if (!open) return null
 
-	return (
-		<motion.div
-			initial={{ opacity: 0 }}
-			animate={{ opacity: 1 }}
-			exit={{ opacity: 0 }}
-			className='fixed inset-0 z-50 bg-surface-0/95 flex flex-col'
-		>
-			<div className='flex items-center justify-between px-4 py-3'>
-				<h2 className='text-lg font-semibold text-text-primary'>Сканер QR</h2>
-				<button
-					onClick={onClose}
-					className='p-2 text-text-muted hover:text-text-primary'
-				>
-					<X size={24} />
-				</button>
-			</div>
+          <AnimatePresence>
+            {showFriendPicker && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden mt-2"
+              >
+                <div className="space-y-1 max-h-48 overflow-y-auto">
+                  {friends.map((f) => {
+                    const selected = selectedFriendIds.has(f.user_id)
+                    return (
+                      <button
+                        key={f.user_id}
+                        onClick={() => toggleFriend(f.user_id)}
+                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg border transition-colors ${
+                          selected
+                            ? 'bg-brand/10 border-brand/40'
+                            : 'bg-surface-2 border-border'
+                        }`}
+                      >
+                        <div
+                          className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${
+                            selected ? 'bg-brand border-brand' : 'border-border'
+                          }`}
+                        >
+                          {selected && <Check size={12} className="text-white" />}
+                        </div>
+                        <span className="text-sm text-text-primary text-left truncate flex-1">
+                          {f.full_name}
+                        </span>
+                        {f.is_favorite && (
+                          <Star size={12} className="text-warning fill-warning shrink-0" />
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
 
 			{/* Friends selection toggle */}
 			{friends.length > 0 && !results && (

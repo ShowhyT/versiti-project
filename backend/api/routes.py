@@ -16,6 +16,7 @@ from backend.api.friends import (
     handle_send_friend_request,
     handle_respond_friend_request,
     handle_remove_friend,
+    handle_toggle_favorite,
 )
 from backend.api.esports import (
     handle_esports_book,
@@ -62,6 +63,7 @@ def setup_routes(app: web.Application):
     app.router.add_post("/api/friends/request", handle_send_friend_request)
     app.router.add_post("/api/friends/respond", handle_respond_friend_request)
     app.router.add_post("/api/friends/remove", handle_remove_friend)
+    app.router.add_post("/api/friends/favorite", handle_toggle_favorite)
 
     app.router.add_get("/api/grades", handle_get_grades)
     app.router.add_get("/api/attendance/detail", handle_get_attendance_detail)

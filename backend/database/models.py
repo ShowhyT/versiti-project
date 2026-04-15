@@ -69,8 +69,10 @@ class Friend(Base):
     friend_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     # Статус: pending, accepted, rejected
     status: Mapped[str] = mapped_column(String(20), default="pending")
-    # Избранный друг (автоматически включается при отметке)
+    # Избранный — с точки зрения user_id (отправитель запроса)
     is_favorite: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Избранный — с точки зрения friend_id (получатель запроса)
+    friend_is_favorite: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     # Связи
